@@ -1,0 +1,11 @@
+target/
+node_modules/
+.next/
+.vercel/
+.env
+.env.local
+.env*.local
+*.log
+.agents/
+.claude/
+skills-lock.json
