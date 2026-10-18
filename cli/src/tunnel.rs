@@ -3,12 +3,54 @@ use crate::proto::Frame;
 use anyhow::{Context, Result};
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use futures_util::{SinkExt, StreamExt};
+use hickory_resolver::config::{NameServerConfigGroup, ResolverConfig, ResolverOpts};
+use hickory_resolver::TokioAsyncResolver;
 use std::collections::BTreeMap;
+use std::net::SocketAddr;
 use std::time::Duration;
+use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
 use tokio_tungstenite::tungstenite::Message;
+
+/// Resolve a hostname using Cloudflare + Google DNS directly, bypassing the
+/// system resolver. On Termux / Android the system `getaddrinfo` returns
+/// `EAI_AGAIN` ("Try again") whenever the app can't query the Android
+/// resolver — which happens on many devices due to permission / background
+/// restrictions. Going straight to a public DNS server avoids that path.
+async fn resolve_host(host: &str, port: u16) -> Result<Vec<SocketAddr>> {
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return Ok(vec![SocketAddr::new(ip, port)]);
+    }
+    let mut ns = NameServerConfigGroup::cloudflare();
+    ns.merge(NameServerConfigGroup::google());
+    let cfg = ResolverConfig::from_parts(None, vec![], ns);
+    let mut opts = ResolverOpts::default();
+    opts.timeout = Duration::from_secs(5);
+    opts.attempts = 2;
+    let resolver = TokioAsyncResolver::tokio(cfg, opts);
+    let lookup = resolver
+        .lookup_ip(host)
+        .await
+        .with_context(|| format!("dns lookup {host}"))?;
+    let addrs: Vec<SocketAddr> = lookup.iter().map(|ip| SocketAddr::new(ip, port)).collect();
+    if addrs.is_empty() {
+        anyhow::bail!("dns lookup {host}: no addresses");
+    }
+    Ok(addrs)
+}
+
+async fn tcp_connect(host: &str, port: u16) -> Result<TcpStream> {
+    let mut last_err: Option<anyhow::Error> = None;
+    for addr in resolve_host(host, port).await? {
+        match TcpStream::connect(addr).await {
+            Ok(s) => return Ok(s),
+            Err(e) => last_err = Some(anyhow::anyhow!("connect {addr}: {e}")),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("no addresses")))
+}
 
 pub async fn run(
     cfg: &Config,
@@ -73,7 +115,12 @@ async fn one_session(
     );
 
     tracing::info!("connecting {}", ws_url);
-    let (ws, _resp) = tokio_tungstenite::connect_async(req)
+    let host = ws_url.host_str().context("ws url has no host")?.to_string();
+    let is_tls = ws_url.scheme() == "wss";
+    let port = ws_url.port().unwrap_or(if is_tls { 443 } else { 80 });
+    let tcp = tcp_connect(&host, port).await.context("tcp connect")?;
+    let _ = tcp.set_nodelay(true);
+    let (ws, _resp) = tokio_tungstenite::client_async_tls_with_config(req, tcp, None, None)
         .await
         .context("websocket connect")?;
     let (mut tx, mut rx) = ws.split();

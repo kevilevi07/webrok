@@ -25,6 +25,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2"
 bytes = "1"
 base64 = "0.22"
+hickory-resolver = { version = "0.24", default-features = false, features = ["tokio-runtime"] }
 
 [profile.release]
 opt-level = "z"
