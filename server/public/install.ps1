@@ -58,9 +58,16 @@ try { & $ExePath --version | Out-Null } catch { }
 Write-Host "`nInstalled." -ForegroundColor Green
 
 Write-Host ""
-Write-Host "Get your token at $BaseUrl/dashboard  (sign up if you don't have one)."
-$tok = Read-Host "Paste your webrok token (or press Enter to skip)"
-$tok = $tok.Trim()
+# Allow pre-seeding the token via $env:WEBROK_TOKEN for a one-liner install.
+$tok = ''
+if ($env:WEBROK_TOKEN) {
+    $tok = $env:WEBROK_TOKEN.Trim()
+    Write-Host "Using token from `$env:WEBROK_TOKEN."
+} else {
+    Write-Host "Get your token at $BaseUrl/dashboard  (sign up if you don't have one)."
+    $tok = Read-Host "Paste your webrok token (or press Enter to skip)"
+    $tok = $tok.Trim()
+}
 if ($tok) {
     try { & $ExePath --server $BaseUrl login --token $tok } catch { Write-Warning "login failed: $_" }
 } else {

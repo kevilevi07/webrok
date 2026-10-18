@@ -47,17 +47,27 @@ export default async function Dashboard() {
         </div>
 
         <div className="card" style={{ marginTop: "1.5rem" }}>
-          <h2 style={{ marginTop: 0 }}>Quick start</h2>
-          <pre className="block">{`# Install (Windows PowerShell)
-irm ${base}/install.ps1 | iex
+          <h2 style={{ marginTop: 0 }}>One-command install (with your token)</h2>
+          <p className="muted" style={{ fontSize: "0.9rem" }}>
+            Copy and paste. Installs the CLI and logs you in — no extra steps.
+          </p>
 
-# Install (macOS / Linux)
-curl -sSL ${base}/install.sh | bash
+          <h3 style={{ marginBottom: "0.25rem" }}>Windows (PowerShell)</h3>
+          <CopyRow
+            value={`$env:WEBROK_TOKEN='${user.webrok_token}'; irm ${base}/install.ps1 | iex`}
+          />
 
-# Then
-webrok login       # paste the token above
-webrok http 3000 --name my-app
-# -> ${base}/app/my-app`}</pre>
+          <h3 style={{ marginTop: "1rem", marginBottom: "0.25rem" }}>
+            macOS / Linux / Termux
+          </h3>
+          <CopyRow
+            value={`curl -sSL ${base}/install.sh | bash -s -- ${user.webrok_token}`}
+          />
+
+          <p className="muted" style={{ fontSize: "0.85rem", marginTop: "1rem" }}>
+            Then open a new terminal and run:{" "}
+            <code>webrok http 3000 --name my-app</code>
+          </p>
         </div>
 
         <div className="card" style={{ marginTop: "1.5rem" }}>

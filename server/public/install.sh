@@ -103,7 +103,8 @@ export PATH="$INSTALL_DIR:$PATH"
 "$BIN" --version || true
 
 # ----- interactive login -----
-TOKEN="${1:-}"
+# Precedence: positional arg > $WEBROK_TOKEN > interactive prompt.
+TOKEN="${1:-${WEBROK_TOKEN:-}}"
 if [ -z "$TOKEN" ] && [ -r /dev/tty ]; then
   echo
   echo "Get your token at $BASE_URL/dashboard  (sign up if you don't have one)."
