@@ -27,21 +27,26 @@ function tunnelFromReferer(req: NextRequest): string | null {
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // Normalize so our checks match both /login and /login/ under
+  // trailingSlash: true.
+  const bare = pathname.length > 1 && pathname.endsWith("/")
+    ? pathname.slice(0, -1)
+    : pathname;
 
   // Server internals / landing pages — never rewrite.
   if (
-    pathname === "/" ||
-    pathname === "/favicon.ico" ||
-    pathname.startsWith("/_next/") ||
-    pathname.startsWith("/api/") ||
-    pathname === "/login" ||
-    pathname === "/signup" ||
-    pathname === "/dashboard" ||
-    pathname === "/download" ||
-    pathname === "/logout" ||
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/bin/") ||
-    pathname.startsWith("/install.") // install.ps1, install.sh
+    bare === "" ||
+    bare === "/favicon.ico" ||
+    bare.startsWith("/_next/") ||
+    bare.startsWith("/api/") ||
+    bare === "/login" ||
+    bare === "/signup" ||
+    bare === "/dashboard" ||
+    bare === "/download" ||
+    bare === "/logout" ||
+    bare.startsWith("/admin") ||
+    bare.startsWith("/bin/") ||
+    bare.startsWith("/install.") // install.ps1, install.sh
   ) {
     return NextResponse.next();
   }
