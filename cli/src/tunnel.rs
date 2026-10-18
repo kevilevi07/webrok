@@ -14,47 +14,57 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
 use tokio_tungstenite::tungstenite::Message;
 
-/// Resolve a hostname by trying, in order:
-///   1. DNS-over-HTTPS to Cloudflare (443/TCP) — survives networks that
-///      block UDP/53 or alt DNS servers (Termux on mobile carriers, corporate
-///      Wi-Fi, etc.).
-///   2. Classic UDP+TCP DNS to Cloudflare + Google.
-/// Bypassing the system resolver avoids Android's `EAI_AGAIN` entirely.
-async fn resolve_host(host: &str, port: u16) -> Result<Vec<SocketAddr>> {
-    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        return Ok(vec![SocketAddr::new(ip, port)]);
-    }
-
+fn resolver_opts() -> ResolverOpts {
     let mut opts = ResolverOpts::default();
     opts.timeout = Duration::from_secs(5);
     opts.attempts = 2;
+    opts
+}
 
-    // Try DoH first.
-    let doh = NameServerConfigGroup::cloudflare_https();
-    let doh_cfg = ResolverConfig::from_parts(None, vec![], doh);
-    let doh_resolver = TokioAsyncResolver::tokio(doh_cfg, opts.clone());
-    if let Ok(lookup) = doh_resolver.lookup_ip(host).await {
-        let addrs: Vec<SocketAddr> =
-            lookup.iter().map(|ip| SocketAddr::new(ip, port)).collect();
-        if !addrs.is_empty() {
-            return Ok(addrs);
-        }
+pub async fn resolve_doh(host: &str, port: u16) -> Result<Vec<SocketAddr>> {
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return Ok(vec![SocketAddr::new(ip, port)]);
     }
-
-    // Fall back to classic UDP/TCP DNS.
-    let mut ns = NameServerConfigGroup::cloudflare();
-    ns.merge(NameServerConfigGroup::google());
-    let cfg = ResolverConfig::from_parts(None, vec![], ns);
-    let resolver = TokioAsyncResolver::tokio(cfg, opts);
+    let doh = NameServerConfigGroup::cloudflare_https();
+    let cfg = ResolverConfig::from_parts(None, vec![], doh);
+    let resolver = TokioAsyncResolver::tokio(cfg, resolver_opts());
     let lookup = resolver
         .lookup_ip(host)
         .await
-        .with_context(|| format!("dns lookup {host}"))?;
+        .with_context(|| format!("doh lookup {host}"))?;
     let addrs: Vec<SocketAddr> = lookup.iter().map(|ip| SocketAddr::new(ip, port)).collect();
     if addrs.is_empty() {
-        anyhow::bail!("dns lookup {host}: no addresses");
+        anyhow::bail!("doh lookup {host}: no addresses");
     }
     Ok(addrs)
+}
+
+pub async fn resolve_classic(host: &str, port: u16) -> Result<Vec<SocketAddr>> {
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return Ok(vec![SocketAddr::new(ip, port)]);
+    }
+    let mut ns = NameServerConfigGroup::cloudflare();
+    ns.merge(NameServerConfigGroup::google());
+    let cfg = ResolverConfig::from_parts(None, vec![], ns);
+    let resolver = TokioAsyncResolver::tokio(cfg, resolver_opts());
+    let lookup = resolver
+        .lookup_ip(host)
+        .await
+        .with_context(|| format!("classic dns lookup {host}"))?;
+    let addrs: Vec<SocketAddr> = lookup.iter().map(|ip| SocketAddr::new(ip, port)).collect();
+    if addrs.is_empty() {
+        anyhow::bail!("classic dns lookup {host}: no addresses");
+    }
+    Ok(addrs)
+}
+
+/// Resolve a hostname by trying DoH first, then classic DNS. Bypasses the
+/// system resolver entirely (which returns EAI_AGAIN on Termux / Android).
+async fn resolve_host(host: &str, port: u16) -> Result<Vec<SocketAddr>> {
+    if let Ok(addrs) = resolve_doh(host, port).await {
+        return Ok(addrs);
+    }
+    resolve_classic(host, port).await
 }
 
 async fn tcp_connect(host: &str, port: u16) -> Result<TcpStream> {

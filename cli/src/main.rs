@@ -1,4 +1,5 @@
 mod config;
+mod doctor;
 mod login;
 mod proto;
 mod tunnel;
@@ -29,6 +30,9 @@ enum Cmd {
     Logout,
     /// Show saved config.
     Status,
+    /// Run connectivity probes (DNS, TCP, TLS, token). Useful for debugging
+    /// why `webrok http` can't connect on restricted networks like Termux.
+    Doctor,
     /// Forward a public URL to a local HTTP port.
     Http {
         /// Local port to forward to (e.g. 3000). Prompted if omitted.
@@ -103,6 +107,7 @@ async fn main() -> Result<()> {
             println!("Config:  {}", config::path()?.display());
             Ok(())
         }
+        Cmd::Doctor => doctor::run(&cfg).await,
         Cmd::Http { port, name, host } => {
             let name = prompt_name(name)?;
             let port = prompt_port(port)?;
