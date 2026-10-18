@@ -70,14 +70,31 @@ if ($env:Path -notlike "*$InstallDir*") {
 
 # 5. Sanity check
 try {
-    & $ExePath --version
+    & $ExePath --version | Out-Null
 } catch {
     Write-Host "Note: couldn't invoke webrok.exe directly — the binary is at:"
     Write-Host "  $ExePath"
 }
 
 Write-Host "`nInstalled." -ForegroundColor Green
-Write-Host "Next steps:"
-Write-Host "  1. Visit $BaseUrl/dashboard to copy your token"
-Write-Host "  2. webrok --server $BaseUrl login"
-Write-Host "  3. webrok http <port> --name <app-name>"
+
+# 6. Interactive login — prompt for a token. Blank input skips.
+Write-Host ""
+Write-Host "Get your token at $BaseUrl/dashboard  (sign up if you don't have one)."
+$tok = Read-Host "Paste your webrok token (or press Enter to skip)"
+$tok = $tok.Trim()
+
+if ($tok) {
+    try {
+        & $ExePath --server $BaseUrl login --token $tok
+    } catch {
+        Write-Warning "login failed: $_"
+    }
+} else {
+    Write-Host "Skipped. You can log in later with:"
+    Write-Host "  webrok --server $BaseUrl login"
+}
+
+Write-Host ""
+Write-Host "Done. Open a NEW terminal, then run:"
+Write-Host "  webrok http <port> --name <app-name>"

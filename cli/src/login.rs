@@ -2,7 +2,7 @@ use crate::config::Config;
 use anyhow::{bail, Result};
 use std::io::{self, Write};
 
-pub async fn run(cfg: &mut Config) -> Result<()> {
+pub async fn run(cfg: &mut Config, token_arg: Option<String>) -> Result<()> {
     if cfg.server.is_none() {
         print!("Server URL (e.g. https://webrok.vercel.app): ");
         io::stdout().flush()?;
@@ -16,13 +16,19 @@ pub async fn run(cfg: &mut Config) -> Result<()> {
     }
 
     let server = cfg.require_server()?.to_string();
-    println!();
-    println!("Get your token: {server}/dashboard");
-    print!("Paste token: ");
-    io::stdout().flush()?;
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf)?;
-    let token = buf.trim().to_string();
+    let token = match token_arg {
+        Some(t) => t.trim().to_string(),
+        None => {
+            println!();
+            println!("Get your token: {server}/dashboard");
+            print!("Paste token: ");
+            io::stdout().flush()?;
+            let mut buf = String::new();
+            io::stdin().read_line(&mut buf)?;
+            buf.trim().to_string()
+        }
+    };
+
     if token.is_empty() {
         bail!("token is required");
     }

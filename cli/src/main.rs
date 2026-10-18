@@ -19,8 +19,12 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Save a Vercel personal access token locally (prompts if not piped).
-    Login,
+    /// Save a webrok token locally (prompts if --token not given).
+    Login {
+        /// Token to save (otherwise prompted on stdin).
+        #[arg(long)]
+        token: Option<String>,
+    },
     /// Delete the saved token.
     Logout,
     /// Show saved config.
@@ -83,7 +87,7 @@ async fn main() -> Result<()> {
     }
 
     match cli.cmd {
-        Cmd::Login => login::run(&mut cfg).await,
+        Cmd::Login { token } => login::run(&mut cfg, token).await,
         Cmd::Logout => {
             cfg.token = None;
             cfg.save()?;
