@@ -56,8 +56,51 @@ export async function createUser(email: string, password: string): Promise<UserR
   tx.set(`user:${user.id}`, JSON.stringify(user));
   tx.set(emailKey, user.id);
   tx.setex(`token:${user.webrok_token}`, TOKEN_TTL, user.id);
+  tx.sadd("users", user.id);
   await tx.exec();
   return user;
+}
+
+export async function listAllUsers(): Promise<UserRecord[]> {
+  const ids = await redis().smembers("users");
+  if (ids.length === 0) return [];
+  const results: UserRecord[] = [];
+  for (const id of ids) {
+    const u = await userById(id);
+    if (u) results.push(u);
+  }
+  results.sort((a, b) => b.created_at - a.created_at);
+  return results;
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  const r = redis();
+  const user = await userById(id);
+  if (!user) return false;
+  const tunnelIds: string[] = await r.smembers(`user:${id}:tunnels`);
+  const tx = r.multi();
+  tx.del(`user:${id}`);
+  tx.del(`email:${user.email}`);
+  tx.del(`token:${user.webrok_token}`);
+  tx.del(`user:${id}:tunnels`);
+  for (const t of tunnelIds) tx.del(`tunnel:${t}`);
+  tx.srem("users", id);
+  await tx.exec();
+  return true;
+}
+
+export async function resetToken(id: string): Promise<string | null> {
+  const r = redis();
+  const user = await userById(id);
+  if (!user) return null;
+  const newTok = `wbr_${randomToken(24)}`;
+  const tx = r.multi();
+  tx.del(`token:${user.webrok_token}`);
+  user.webrok_token = newTok;
+  tx.set(`user:${id}`, JSON.stringify(user));
+  tx.setex(`token:${newTok}`, TOKEN_TTL, id);
+  await tx.exec();
+  return newTok;
 }
 
 export async function userByEmail(email: string): Promise<UserRecord | null> {
