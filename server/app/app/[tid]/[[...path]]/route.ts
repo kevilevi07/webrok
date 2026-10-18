@@ -16,6 +16,18 @@ type Ctx = { params: Promise<{ tid: string; path?: string[] }> };
 async function handle(req: Request, ctx: Ctx): Promise<Response> {
   const { tid, path } = await ctx.params;
 
+  const url = new URL(req.url);
+
+  // If the client hit /app/<tid> without a trailing slash, redirect to
+  // /app/<tid>/ so relative links in the tunneled app's HTML resolve
+  // correctly. Without this, a directory listing's "<a href='file'>"
+  // resolves to /app/file (wrong) instead of /app/<tid>/file (right).
+  if (!path && !url.pathname.endsWith("/")) {
+    const to = new URL(url.toString());
+    to.pathname = url.pathname + "/";
+    return Response.redirect(to.toString(), 308);
+  }
+
   const r = redis();
   const alive = await r.exists(keys.tunnel(tid));
   if (!alive) {
@@ -27,7 +39,6 @@ async function handle(req: Request, ctx: Ctx): Promise<Response> {
 
   const reqId = newId(10);
 
-  const url = new URL(req.url);
   // Preserve the "/" + anything after /t/<tid>, plus query string.
   const forwardPath = "/" + (path ?? []).join("/") + (url.search || "");
 
