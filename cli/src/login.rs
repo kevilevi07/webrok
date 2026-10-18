@@ -1,5 +1,5 @@
 use crate::config::Config;
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use std::io::{self, Write};
 
 pub async fn run(cfg: &mut Config) -> Result<()> {
@@ -15,9 +15,9 @@ pub async fn run(cfg: &mut Config) -> Result<()> {
         cfg.server = Some(s);
     }
 
+    let server = cfg.require_server()?.to_string();
     println!();
-    println!("Create a Vercel token:  https://vercel.com/account/tokens");
-    println!("(Scope: Full Account, no expiration if you want a long-lived tunnel.)");
+    println!("Get your token: {server}/dashboard");
     print!("Paste token: ");
     io::stdout().flush()?;
     let mut buf = String::new();
@@ -26,17 +26,8 @@ pub async fn run(cfg: &mut Config) -> Result<()> {
     if token.is_empty() {
         bail!("token is required");
     }
-
-    // Validate against Vercel's API before saving.
-    let client = reqwest::Client::new();
-    let r = client
-        .get("https://api.vercel.com/v2/user")
-        .bearer_auth(&token)
-        .send()
-        .await
-        .context("validating token against Vercel API")?;
-    if !r.status().is_success() {
-        bail!("Vercel rejected the token (HTTP {})", r.status());
+    if !token.starts_with("wbr_") {
+        eprintln!("warning: tokens usually start with 'wbr_'. Continuing anyway.");
     }
 
     cfg.token = Some(token);

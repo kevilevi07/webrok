@@ -17,7 +17,7 @@
 //     inject it as the first child of <head>.
 
 export function htmlShim(tunnelName: string): string {
-  const prefix = `/${tunnelName}`;
+  const prefix = `/app/${tunnelName}`;
   // Inline JSON-encoded string so quoting is safe.
   const p = JSON.stringify(prefix);
   const js = `

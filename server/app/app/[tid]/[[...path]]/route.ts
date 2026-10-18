@@ -101,7 +101,7 @@ async function handle(req: Request, ctx: Ctx): Promise<Response> {
     // server root.
     let value = v;
     if (kl === "location" && value.startsWith("/") && !value.startsWith("//")) {
-      const prefix = `/${tid}`;
+      const prefix = `/app/${tid}`;
       if (value !== prefix && !value.startsWith(prefix + "/")) {
         value = prefix + value;
       }

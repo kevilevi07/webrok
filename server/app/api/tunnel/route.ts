@@ -15,7 +15,7 @@ import type { WebSocket } from "ws";
 import type { Frame } from "@/lib/proto";
 import { newId } from "@/lib/proto";
 import { keys, redis, subscriber, TUNNEL_TTL_SECONDS } from "@/lib/redis";
-import { validateVercelToken } from "@/lib/vercel-oauth";
+import { userIdFromToken } from "@/lib/auth";
 import { isValidName } from "@/lib/names";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +25,8 @@ export async function GET(req: Request): Promise<Response> {
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
   if (!token) return new Response("missing bearer token", { status: 401 });
 
-  const userId = await validateVercelToken(token);
-  if (!userId) return new Response("invalid vercel token", { status: 401 });
+  const userId = await userIdFromToken(token);
+  if (!userId) return new Response("invalid webrok token", { status: 401 });
 
   const url = new URL(req.url);
   const requested = url.searchParams.get("name") ?? url.searchParams.get("tid");
@@ -60,7 +60,7 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const publicBase = (process.env.WEBROK_PUBLIC_URL ?? url.origin).replace(/\/$/, "");
-  const publicUrl = `${publicBase}/${tid}`;
+  const publicUrl = `${publicBase}/app/${tid}`;
 
   return upgradeWebSocket(async (ws: WebSocket) => {
     await claimTunnel(tid, userId);

@@ -1,12 +1,15 @@
-// Rules for tunnel/app names used as the first URL segment.
+// Rules for app names (first segment under /app/).
 
-// Only paths that genuinely collide with the server itself are reserved.
+// Only names that collide with the server's own paths are reserved.
 export const RESERVED_NAMES = new Set([
-  "api", // our WS endpoint and future control APIs
-  "_next", // Next.js assets
+  "api",
+  "_next",
   "favicon.ico",
   "robots.txt",
   "sitemap.xml",
+  // Reserved for future top-level routes under /app/.
+  "admin",
+  "settings",
 ]);
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/;
