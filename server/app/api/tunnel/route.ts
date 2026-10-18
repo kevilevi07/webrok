@@ -35,7 +35,7 @@ export async function GET(req: Request): Promise<Response> {
   if (requested) {
     if (!isValidName(requested)) {
       return new Response(
-        "invalid app name: use 3-32 chars, lowercase a-z 0-9 and hyphens, " +
+        "invalid app name: use 2-32 chars, lowercase a-z 0-9 and hyphens, " +
           "and avoid reserved words (api, _next, oauth, dashboard, login, ...)",
         { status: 400 },
       );

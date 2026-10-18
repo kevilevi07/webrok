@@ -51,7 +51,7 @@ fn prompt_name(given: Option<String>) -> Result<String> {
     if let Some(n) = given {
         return Ok(n);
     }
-    print!("App name (3-32 chars, lowercase a-z 0-9 -, e.g. my-app): ");
+    print!("App name (2-32 chars, lowercase a-z 0-9 -, e.g. my-app): ");
     io::stdout().flush()?;
     let mut buf = String::new();
     io::stdin().read_line(&mut buf)?;

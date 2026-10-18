@@ -27,8 +27,8 @@ function tunnelFromReferer(req: NextRequest): string | null {
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  // Normalize so our checks match both /login and /login/ under
-  // trailingSlash: true.
+  // Clients send either /login or /login/ depending on the shell; strip
+  // the trailing slash so every bypass check works against one form.
   const bare = pathname.length > 1 && pathname.endsWith("/")
     ? pathname.slice(0, -1)
     : pathname;
@@ -44,6 +44,7 @@ export function middleware(req: NextRequest) {
     bare === "/dashboard" ||
     bare === "/download" ||
     bare === "/logout" ||
+    bare === "/app" || // bare /app with no tunnel name — don't rewrite
     bare.startsWith("/admin") ||
     bare.startsWith("/bin/") ||
     bare.startsWith("/install.") // install.ps1, install.sh
