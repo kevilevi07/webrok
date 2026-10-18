@@ -12,7 +12,9 @@ export const RESERVED_NAMES = new Set([
   "settings",
 ]);
 
-const NAME_RE = /^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$/;
+// 2-32 chars: start/end alphanumeric; hyphens allowed only in the middle.
+// Also accept a 1-char all-alphanumeric name (e.g. "x").
+const NAME_RE = /^(?:[a-z0-9]|[a-z0-9][a-z0-9-]{0,30}[a-z0-9])$/;
 
 export function isValidName(s: string | null | undefined): s is string {
   if (!s) return false;

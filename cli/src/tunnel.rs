@@ -120,9 +120,32 @@ async fn one_session(
     let port = ws_url.port().unwrap_or(if is_tls { 443 } else { 80 });
     let tcp = tcp_connect(&host, port).await.context("tcp connect")?;
     let _ = tcp.set_nodelay(true);
-    let (ws, _resp) = tokio_tungstenite::client_async_tls_with_config(req, tcp, None, None)
+    let (ws, _resp) = match tokio_tungstenite::client_async_tls_with_config(req, tcp, None, None)
         .await
-        .context("websocket connect")?;
+    {
+        Ok(v) => v,
+        Err(tokio_tungstenite::tungstenite::Error::Http(resp)) => {
+            let status = resp.status();
+            let body = resp
+                .into_body()
+                .and_then(|b| String::from_utf8(b).ok())
+                .unwrap_or_default();
+            let hint = if status == 400 {
+                "  (hint: --name must be 2-32 chars, lowercase a-z, 0-9, hyphens; or omit it)"
+            } else if status == 401 {
+                "  (hint: run `webrok login` with a valid wbr_ token)"
+            } else {
+                ""
+            };
+            anyhow::bail!(
+                "server rejected handshake: HTTP {}\n  {}{}",
+                status,
+                body.trim(),
+                hint
+            );
+        }
+        Err(e) => return Err(e).context("websocket connect"),
+    };
     let (mut tx, mut rx) = ws.split();
 
     let (out_tx, mut out_rx) = mpsc::channel::<Message>(64);
