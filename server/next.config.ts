@@ -5,12 +5,14 @@ const config: NextConfig = {
   // require('bufferutil') / dynamic imports resolve against node_modules
   // at runtime instead of being partially inlined.
   serverExternalPackages: ["ws", "bufferutil", "utf-8-validate", "ioredis"],
-  // Preserve trailing slashes on URLs. Without this, Next.js strips the
-  // slash from /app/<tid>/subdir/ to /app/<tid>/subdir — but Python's
-  // http.server (and many static servers) then 302-redirect back to the
-  // slashed form for directories, which we rewrite back into the tunnel,
-  // Next.js strips again, and so on. Keeping slashes stops that loop.
-  trailingSlash: true,
+  // Don't let Next.js rewrite trailing slashes in either direction. We need
+  // this because:
+  //   1. /app/<tid>/subdir/ must stay slashed, otherwise python http.server
+  //      bounces back a 302 that re-slashes and we loop forever.
+  //   2. /api/tunnel must stay unslashed, otherwise the WebSocket upgrade
+  //      request gets 308-redirected and the handshake fails.
+  // Both URL forms (/login and /login/) reach the matching page.
+  skipTrailingSlashRedirect: true,
 };
 
 export default config;
