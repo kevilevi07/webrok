@@ -127,7 +127,7 @@ async function handle(req: Request, ctx: Ctx): Promise<Response> {
   let bodyBytes: Uint8Array;
   if (isHtml && encodingOk) {
     const html = Buffer.from(reply.body_b64, "base64").toString("utf8");
-    const injected = injectShim(html, tid);
+    const injected = injectShim(html, tid, url.pathname);
     bodyBytes = new Uint8Array(Buffer.from(injected, "utf8"));
     resHeaders.delete("content-length");
   } else {

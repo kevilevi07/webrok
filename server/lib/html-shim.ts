@@ -81,18 +81,31 @@ export function htmlShim(tunnelName: string): string {
 }
 
 /**
- * Build a `<base>` tag that makes the browser resolve relative links
- * against the tunnel prefix. Without it, a directory listing at
- * /app/<tid> would resolve <a href="file"> to /app/file (dropping the
- * tunnel id) instead of /app/<tid>/file.
+ * Compute the <base> href so that relative links in the tunneled app's
+ * HTML resolve against the current URL's directory, like the browser
+ * would do natively if the URL ended with a slash.
  *
- * The base href intentionally does NOT include a trailing slash: when
- * the browser is already at /app/<tid>/..., its own trailing-slash
- * behavior takes care of relative resolution; the base only kicks in
- * when the URL omits the slash.
+ * Examples (tid = "dir"):
+ *   /app/dir                      -> /app/dir/
+ *   /app/dir/                     -> /app/dir/
+ *   /app/dir/Downloads/           -> /app/dir/Downloads/
+ *   /app/dir/Downloads/page.html  -> /app/dir/Downloads/
+ *   /app/dir/a/b/c.txt            -> /app/dir/a/b/
  */
-function baseTag(tunnelName: string): string {
-  return `<base href="/app/${tunnelName}/">`;
+function baseHref(tunnelName: string, pathname: string): string {
+  const prefix = `/app/${tunnelName}`;
+  if (pathname.endsWith("/")) return pathname;
+  // Strip to the last "/", giving the "dirname".
+  const idx = pathname.lastIndexOf("/");
+  const dirname = idx >= 0 ? pathname.slice(0, idx + 1) : "/";
+  // Never go shallower than the tunnel root — otherwise a bare /app/<tid>
+  // would produce /app/, dropping the tunnel id.
+  const minimum = prefix + "/";
+  return dirname.length >= minimum.length ? dirname : minimum;
+}
+
+function baseTag(tunnelName: string, pathname: string): string {
+  return `<base href="${baseHref(tunnelName, pathname)}">`;
 }
 
 /**
@@ -101,11 +114,11 @@ function baseTag(tunnelName: string): string {
  * Order matters: <base> must come before <script> so the shim's own
  * relative references (if any) resolve correctly.
  */
-export function injectShim(html: string, tunnelName: string): string {
+export function injectShim(html: string, tunnelName: string, pathname: string): string {
   // Don't inject a <base> if the HTML already defines one — respect the
   // app's intent.
   const hasBase = /<base\b/i.test(html);
-  const injected = (hasBase ? "" : baseTag(tunnelName)) + htmlShim(tunnelName);
+  const injected = (hasBase ? "" : baseTag(tunnelName, pathname)) + htmlShim(tunnelName);
   const headOpen = html.search(/<head\b[^>]*>/i);
   if (headOpen === -1) return injected + html;
   const insertAt = headOpen + (html.match(/<head\b[^>]*>/i)?.[0]?.length ?? 6);
