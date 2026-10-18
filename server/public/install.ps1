@@ -1,6 +1,8 @@
 #Requires -Version 5.1
 # webrok Windows installer.
 # Usage:  irm https://webrok.vercel.app/install.ps1 | iex
+#
+# Works in both Full Language Mode and Constrained Language Mode (CLM).
 
 $ErrorActionPreference = 'Stop'
 $BaseUrl = 'https://webrok.vercel.app'
@@ -22,18 +24,38 @@ try {
     Invoke-WebRequest -Uri "$BaseUrl/webrok.exe" -OutFile $ExePath -UseBasicParsing
 } catch {
     Write-Error "Download failed: $_"
-    exit 1
+    return
 }
 $size = (Get-Item $ExePath).Length
 Write-Host ("  saved {0}  ({1:N0} bytes)" -f $ExePath, $size)
 
-# 3. Add install dir to the user's PATH (persists across sessions)
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-if (-not $userPath) { $userPath = '' }
-$parts = $userPath -split ';' | Where-Object { $_ -ne '' }
-if ($parts -notcontains $InstallDir) {
-    $newPath = (@($parts + $InstallDir) -join ';').TrimStart(';')
-    [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
+# 3. Add install dir to the user's PATH.
+# Use registry cmdlets + reg.exe so this works under Constrained Language Mode
+# (where [Environment]::SetEnvironmentVariable() is blocked).
+$regPath = 'HKCU:\Environment'
+$existing = ''
+try {
+    $existing = (Get-ItemProperty -LiteralPath $regPath -Name Path -ErrorAction Stop).Path
+} catch {
+    $existing = ''
+}
+if (-not $existing) { $existing = '' }
+
+$parts = @()
+foreach ($p in ($existing -split ';')) {
+    if ($p -and ($p.Trim() -ne '')) { $parts += $p }
+}
+
+$needAdd = $true
+foreach ($p in $parts) {
+    if ($p.TrimEnd('\') -ieq $InstallDir.TrimEnd('\')) { $needAdd = $false; break }
+}
+
+if ($needAdd) {
+    $parts += $InstallDir
+    $new = ($parts -join ';')
+    # reg.exe preserves REG_EXPAND_SZ type and avoids setx's 1024-char limit.
+    & reg add 'HKCU\Environment' /v Path /t REG_EXPAND_SZ /d $new /f | Out-Null
     Write-Host "`nAdded to user PATH:" -ForegroundColor Green
     Write-Host "  $InstallDir"
     Write-Host "  (open a new terminal to pick it up)"
@@ -41,18 +63,21 @@ if ($parts -notcontains $InstallDir) {
     Write-Host "`nPATH already contains $InstallDir"
 }
 
-# 4. Also set it for the CURRENT shell so the user can run it right away
+# 4. Make it available in the CURRENT shell so you can run `webrok` right away.
 if ($env:Path -notlike "*$InstallDir*") {
     $env:Path = "$env:Path;$InstallDir"
 }
 
-# 5. Set default server
+# 5. Sanity check
 try {
-    & $ExePath --server $BaseUrl status | Out-Null
-} catch { }
+    & $ExePath --version
+} catch {
+    Write-Host "Note: couldn't invoke webrok.exe directly — the binary is at:"
+    Write-Host "  $ExePath"
+}
 
 Write-Host "`nInstalled." -ForegroundColor Green
 Write-Host "Next steps:"
 Write-Host "  1. Visit $BaseUrl/dashboard to copy your token"
-Write-Host "  2. Run:  webrok --server $BaseUrl login"
-Write-Host "  3. Run:  webrok http <port> --name <app-name>"
+Write-Host "  2. webrok --server $BaseUrl login"
+Write-Host "  3. webrok http <port> --name <app-name>"
