@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-const REL = "https://github.com/kevilevi07/webrok/releases/latest/download";
-
 const PLATFORMS = [
   { label: "Windows x86_64", asset: "webrok-windows-x64.exe", file: "webrok.exe" },
   { label: "Linux x86_64", asset: "webrok-linux-x64", file: "webrok" },
@@ -49,7 +47,7 @@ export default function Download() {
           <ul>
             {PLATFORMS.map((p) => (
               <li key={p.asset} style={{ marginBottom: "0.4rem" }}>
-                <a href={`${REL}/${p.asset}`} rel="noreferrer">
+                <a href={`${base}/bin/${p.asset}`} rel="noreferrer">
                   {p.asset}
                 </a>{" "}
                 <span className="muted">— {p.label}</span>

@@ -4,14 +4,13 @@
 
 $ErrorActionPreference = 'Stop'
 $BaseUrl = 'https://webrok.vercel.app'
-$ReleaseUrl = 'https://github.com/kevilevi07/webrok/releases/latest/download'
 $Asset = 'webrok-windows-x64.exe'
 $InstallDir = Join-Path $env:USERPROFILE '.webrok\bin'
 $ExePath = Join-Path $InstallDir 'webrok.exe'
 
 Write-Host "webrok installer" -ForegroundColor Cyan
 Write-Host "  install dir : $InstallDir"
-Write-Host "  download    : $ReleaseUrl/$Asset"
+Write-Host "  download    : $BaseUrl/bin/$Asset"
 
 if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
@@ -19,7 +18,7 @@ if (-not (Test-Path $InstallDir)) {
 
 Write-Host "`nDownloading..."
 try {
-    Invoke-WebRequest -Uri "$ReleaseUrl/$Asset" -OutFile $ExePath -UseBasicParsing
+    Invoke-WebRequest -Uri "$BaseUrl/bin/$Asset" -OutFile $ExePath -UseBasicParsing
 } catch {
     Write-Error "Download failed: $_"
     return

@@ -40,6 +40,7 @@ export function middleware(req: NextRequest) {
     pathname === "/download" ||
     pathname === "/logout" ||
     pathname.startsWith("/admin") ||
+    pathname.startsWith("/bin/") ||
     pathname.startsWith("/install.") // install.ps1, install.sh
   ) {
     return NextResponse.next();

@@ -8,7 +8,7 @@
 set -euo pipefail
 
 BASE_URL="${WEBROK_BASE_URL:-https://webrok.vercel.app}"
-RELEASE_URL="${WEBROK_RELEASE_URL:-https://github.com/kevilevi07/webrok/releases/latest/download}"
+BIN_BASE="$BASE_URL/bin"
 INSTALL_DIR="$HOME/.webrok/bin"
 BIN="$INSTALL_DIR/webrok"
 
@@ -40,14 +40,14 @@ echo "  install dir : $INSTALL_DIR"
 if [ -z "$ASSET" ]; then
   echo >&2
   echo "Error: no prebuilt binary for $OS/$ARCH." >&2
-  echo "Open an issue: https://github.com/kevilevi07/webrok/issues" >&2
+  echo "Contact support via $BASE_URL" >&2
   exit 1
 fi
 
 mkdir -p "$INSTALL_DIR"
 
 # ----- download -----
-URL="$RELEASE_URL/$ASSET"
+URL="$BIN_BASE/$ASSET"
 echo
 echo "Downloading $URL ..."
 if command -v curl >/dev/null 2>&1; then
