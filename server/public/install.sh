@@ -62,17 +62,41 @@ chmod +x "$BIN"
 echo "  saved $BIN"
 
 # ----- PATH setup -----
+# We write to every shell startup file we know of. On fresh installs (Termux
+# especially) these files don't exist yet, so we create them. Login shells on
+# Termux read .bash_profile OR .profile (first match); interactive bash reads
+# .bashrc; zsh reads .zshenv unconditionally. Covering all four means a new
+# terminal always picks up PATH no matter which shell / login mode is used.
 PATH_LINE='export PATH="$HOME/.webrok/bin:$PATH"'
-# bash: .bashrc for interactive, .profile for login
-# zsh:  .zshenv is sourced by every zsh (login, interactive, non-interactive)
-RC_CANDIDATES="$HOME/.bashrc $HOME/.zshrc $HOME/.zshenv $HOME/.profile"
-for rc in $RC_CANDIDATES; do
-  if [ ! -f "$rc" ] && [ "$rc" != "$HOME/.zshenv" ]; then continue; fi
+ALWAYS_CREATE="$HOME/.bashrc $HOME/.bash_profile $HOME/.profile"
+MAYBE_ZSH="$HOME/.zshrc $HOME/.zshenv"
+
+add_path_line() {
+  rc="$1"
+  if [ ! -f "$rc" ]; then
+    touch "$rc" || return 0
+  fi
   if ! grep -Fqs "$PATH_LINE" "$rc" 2>/dev/null; then
     printf '\n# webrok\n%s\n' "$PATH_LINE" >> "$rc"
     echo "  added PATH to $rc"
   fi
-done
+}
+
+for rc in $ALWAYS_CREATE; do add_path_line "$rc"; done
+# Only touch zsh files if the user actually has zsh installed OR a file exists.
+if command -v zsh >/dev/null 2>&1 || [ -f "$HOME/.zshrc" ] || [ -f "$HOME/.zshenv" ]; then
+  for rc in $MAYBE_ZSH; do add_path_line "$rc"; done
+fi
+
+# Make sure .bash_profile actually sources .bashrc on login shells (Termux's
+# default), so the PATH we just added is visible in every new terminal.
+if ! grep -Fqs 'webrok: source .bashrc' "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<'EOF'
+
+# webrok: source .bashrc from login shells (Termux default)
+[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"
+EOF
+fi
 
 # Make it work in THIS invocation.
 export PATH="$INSTALL_DIR:$PATH"
