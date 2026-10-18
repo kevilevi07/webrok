@@ -14,21 +14,37 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
 use tokio_tungstenite::tungstenite::Message;
 
-/// Resolve a hostname using Cloudflare + Google DNS directly, bypassing the
-/// system resolver. On Termux / Android the system `getaddrinfo` returns
-/// `EAI_AGAIN` ("Try again") whenever the app can't query the Android
-/// resolver — which happens on many devices due to permission / background
-/// restrictions. Going straight to a public DNS server avoids that path.
+/// Resolve a hostname by trying, in order:
+///   1. DNS-over-HTTPS to Cloudflare (443/TCP) — survives networks that
+///      block UDP/53 or alt DNS servers (Termux on mobile carriers, corporate
+///      Wi-Fi, etc.).
+///   2. Classic UDP+TCP DNS to Cloudflare + Google.
+/// Bypassing the system resolver avoids Android's `EAI_AGAIN` entirely.
 async fn resolve_host(host: &str, port: u16) -> Result<Vec<SocketAddr>> {
     if let Ok(ip) = host.parse::<std::net::IpAddr>() {
         return Ok(vec![SocketAddr::new(ip, port)]);
     }
-    let mut ns = NameServerConfigGroup::cloudflare();
-    ns.merge(NameServerConfigGroup::google());
-    let cfg = ResolverConfig::from_parts(None, vec![], ns);
+
     let mut opts = ResolverOpts::default();
     opts.timeout = Duration::from_secs(5);
     opts.attempts = 2;
+
+    // Try DoH first.
+    let doh = NameServerConfigGroup::cloudflare_https();
+    let doh_cfg = ResolverConfig::from_parts(None, vec![], doh);
+    let doh_resolver = TokioAsyncResolver::tokio(doh_cfg, opts.clone());
+    if let Ok(lookup) = doh_resolver.lookup_ip(host).await {
+        let addrs: Vec<SocketAddr> =
+            lookup.iter().map(|ip| SocketAddr::new(ip, port)).collect();
+        if !addrs.is_empty() {
+            return Ok(addrs);
+        }
+    }
+
+    // Fall back to classic UDP/TCP DNS.
+    let mut ns = NameServerConfigGroup::cloudflare();
+    ns.merge(NameServerConfigGroup::google());
+    let cfg = ResolverConfig::from_parts(None, vec![], ns);
     let resolver = TokioAsyncResolver::tokio(cfg, opts);
     let lookup = resolver
         .lookup_ip(host)
