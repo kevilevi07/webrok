@@ -81,13 +81,33 @@ export function htmlShim(tunnelName: string): string {
 }
 
 /**
- * Inject the shim as the first <head> child, if the response is HTML.
- * If no <head> is found, prepend the whole document.
+ * Build a `<base>` tag that makes the browser resolve relative links
+ * against the tunnel prefix. Without it, a directory listing at
+ * /app/<tid> would resolve <a href="file"> to /app/file (dropping the
+ * tunnel id) instead of /app/<tid>/file.
+ *
+ * The base href intentionally does NOT include a trailing slash: when
+ * the browser is already at /app/<tid>/..., its own trailing-slash
+ * behavior takes care of relative resolution; the base only kicks in
+ * when the URL omits the slash.
+ */
+function baseTag(tunnelName: string): string {
+  return `<base href="/app/${tunnelName}/">`;
+}
+
+/**
+ * Inject the shim + base tag as the first <head> children, if the
+ * response is HTML. If no <head> is found, prepend the whole document.
+ * Order matters: <base> must come before <script> so the shim's own
+ * relative references (if any) resolve correctly.
  */
 export function injectShim(html: string, tunnelName: string): string {
-  const shim = htmlShim(tunnelName);
+  // Don't inject a <base> if the HTML already defines one — respect the
+  // app's intent.
+  const hasBase = /<base\b/i.test(html);
+  const injected = (hasBase ? "" : baseTag(tunnelName)) + htmlShim(tunnelName);
   const headOpen = html.search(/<head\b[^>]*>/i);
-  if (headOpen === -1) return shim + html;
+  if (headOpen === -1) return injected + html;
   const insertAt = headOpen + (html.match(/<head\b[^>]*>/i)?.[0]?.length ?? 6);
-  return html.slice(0, insertAt) + shim + html.slice(insertAt);
+  return html.slice(0, insertAt) + injected + html.slice(insertAt);
 }
