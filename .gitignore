@@ -9,3 +9,4 @@ node_modules/
 .agents/
 .claude/
 skills-lock.json
+server/public/webrok*

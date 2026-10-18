@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
-# webrok installer for macOS, Linux, and Termux (Android).
+# webrok installer — downloads a prebuilt binary. No Rust required.
 #
 # Usage:
 #   curl -sSL https://webrok.vercel.app/install.sh | bash
 #   curl -sSL https://webrok.vercel.app/install.sh | bash -s -- <token>
-#
-# On Linux/Termux/macOS it builds the Rust CLI from source
-# (so you need Rust: see the per-platform note below).
 
 set -euo pipefail
 
 BASE_URL="${WEBROK_BASE_URL:-https://webrok.vercel.app}"
+RELEASE_URL="${WEBROK_RELEASE_URL:-https://github.com/kevilevi07/webrok/releases/latest/download}"
 INSTALL_DIR="$HOME/.webrok/bin"
 BIN="$INSTALL_DIR/webrok"
 
@@ -18,101 +16,76 @@ BIN="$INSTALL_DIR/webrok"
 is_termux() { [ -n "${PREFIX:-}" ] && echo "$PREFIX" | grep -q "com.termux"; }
 
 OS="$(uname -s 2>/dev/null || echo unknown)"
-case "$OS" in
-  Darwin) PLATFORM="macOS" ;;
-  Linux)  PLATFORM="$(is_termux && echo Termux || echo Linux)" ;;
-  *)      PLATFORM="$OS" ;;
+ARCH="$(uname -m 2>/dev/null || echo unknown)"
+
+case "$OS/$ARCH" in
+  Linux/x86_64|Linux/amd64)                ASSET="webrok-linux-x64"   ; PLATFORM="Linux x64" ;;
+  Linux/aarch64|Linux/arm64)               ASSET="webrok-linux-arm64" ; PLATFORM="Linux ARM64" ;;
+  Darwin/x86_64)                           ASSET="webrok-darwin-x64"  ; PLATFORM="macOS Intel" ;;
+  Darwin/arm64)                            ASSET="webrok-darwin-arm64"; PLATFORM="macOS Apple Silicon" ;;
+  *)                                       ASSET=""                   ; PLATFORM="$OS/$ARCH" ;;
 esac
+
+if is_termux; then
+  case "$ARCH" in
+    aarch64|arm64)  ASSET="webrok-linux-arm64" ; PLATFORM="Termux ARM64" ;;
+    x86_64|amd64)   ASSET="webrok-linux-x64"   ; PLATFORM="Termux x64" ;;
+  esac
+fi
 
 echo "webrok installer"
 echo "  platform    : $PLATFORM"
 echo "  install dir : $INSTALL_DIR"
 
+if [ -z "$ASSET" ]; then
+  echo >&2
+  echo "Error: no prebuilt binary for $OS/$ARCH." >&2
+  echo "Open an issue: https://github.com/kevilevi07/webrok/issues" >&2
+  exit 1
+fi
+
 mkdir -p "$INSTALL_DIR"
 
-# ----- ensure cargo -----
-if ! command -v cargo >/dev/null 2>&1; then
-  if [ "$PLATFORM" = "Termux" ]; then
-    cat <<EOF >&2
-
-Error: Rust (cargo) is not installed in Termux.
-Install it with:
-  pkg update && pkg install rust
-
-Then re-run:
-  curl -sSL $BASE_URL/install.sh | bash
-EOF
-    exit 1
-  fi
-  cat <<EOF >&2
-
-Error: cargo is required on $PLATFORM. Install Rust first:
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-Then open a new shell and re-run:
-  curl -sSL $BASE_URL/install.sh | bash
-EOF
-  exit 1
-fi
-
-# ----- build from source -----
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
-
+# ----- download -----
+URL="$RELEASE_URL/$ASSET"
 echo
-echo "Fetching source..."
-curl -sSL "https://github.com/kevilevi07/webrok/archive/refs/heads/main.tar.gz" | tar -xz -C "$tmp"
-SRC_DIR="$(find "$tmp" -maxdepth 1 -type d -name 'webrok-*' | head -1)"
-if [ -z "$SRC_DIR" ]; then
-  echo "Error: source archive layout unexpected." >&2
+echo "Downloading $URL ..."
+if command -v curl >/dev/null 2>&1; then
+  curl -fSL --progress-bar "$URL" -o "$BIN"
+elif command -v wget >/dev/null 2>&1; then
+  wget -q --show-progress -O "$BIN" "$URL"
+else
+  echo "Error: need curl or wget." >&2
   exit 1
 fi
-
-echo "Compiling (first build takes ~2 min)..."
-( cd "$SRC_DIR/cli" && cargo build --release )
-cp "$SRC_DIR/cli/target/release/webrok" "$BIN"
 chmod +x "$BIN"
-echo "  built $BIN"
+echo "  saved $BIN"
 
-# ----- add to PATH in rc files that each shell actually sources -----
+# ----- PATH setup -----
 PATH_LINE='export PATH="$HOME/.webrok/bin:$PATH"'
 # bash: .bashrc for interactive, .profile for login
 # zsh:  .zshenv is sourced by every zsh (login, interactive, non-interactive)
 RC_CANDIDATES="$HOME/.bashrc $HOME/.zshrc $HOME/.zshenv $HOME/.profile"
 for rc in $RC_CANDIDATES; do
-  # Only create .zshenv on demand; create nothing else.
-  if [ ! -f "$rc" ] && [ "$rc" != "$HOME/.zshenv" ]; then
-    continue
-  fi
+  if [ ! -f "$rc" ] && [ "$rc" != "$HOME/.zshenv" ]; then continue; fi
   if ! grep -Fqs "$PATH_LINE" "$rc" 2>/dev/null; then
-    { printf '\n# webrok\n%s\n' "$PATH_LINE"; } >> "$rc"
+    printf '\n# webrok\n%s\n' "$PATH_LINE" >> "$rc"
     echo "  added PATH to $rc"
   fi
 done
 
-# Make it work in THIS invocation so --version works.
+# Make it work in THIS invocation.
 export PATH="$INSTALL_DIR:$PATH"
-
-echo
 "$BIN" --version || true
 
-# ----- interactive login (prompt for token) -----
+# ----- interactive login -----
 TOKEN="${1:-}"
-if [ -z "$TOKEN" ]; then
-  if [ -t 0 ] || [ -r /dev/tty ]; then
-    echo
-    echo "Get your token at $BASE_URL/dashboard  (sign up if you don't have one)."
-    # read from /dev/tty so this works when the script is piped from curl
-    if [ -r /dev/tty ]; then
-      printf "Paste your webrok token (or press Enter to skip): "
-      IFS= read -r TOKEN < /dev/tty || TOKEN=""
-    else
-      printf "Paste your webrok token (or press Enter to skip): "
-      IFS= read -r TOKEN || TOKEN=""
-    fi
-  fi
+if [ -z "$TOKEN" ] && [ -r /dev/tty ]; then
+  echo
+  echo "Get your token at $BASE_URL/dashboard  (sign up if you don't have one)."
+  printf "Paste your webrok token (or press Enter to skip): "
+  IFS= read -r TOKEN < /dev/tty || TOKEN=""
 fi
-
 TOKEN="$(printf '%s' "${TOKEN:-}" | tr -d '[:space:]')"
 if [ -n "$TOKEN" ]; then
   "$BIN" --server "$BASE_URL" login --token "$TOKEN" || echo "login failed; try: webrok --server $BASE_URL login"
