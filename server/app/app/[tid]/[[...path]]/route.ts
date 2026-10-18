@@ -28,8 +28,14 @@ async function handle(req: Request, ctx: Ctx): Promise<Response> {
 
   const reqId = newId(10);
 
-  // Preserve the "/" + anything after /t/<tid>, plus query string.
-  const forwardPath = "/" + (path ?? []).join("/") + (url.search || "");
+  // Preserve the "/" + anything after /app/<tid>. Keep the trailing slash
+  // if the original URL had one — many static servers (python http.server
+  // among them) return a 302 redirect to add it for directories, which
+  // we'd otherwise bounce back and forth forever.
+  const hadTrailingSlash = url.pathname.endsWith("/") && url.pathname !== `/app/${tid}`;
+  let forwardPath = "/" + (path ?? []).join("/");
+  if (hadTrailingSlash && !forwardPath.endsWith("/")) forwardPath += "/";
+  forwardPath += url.search || "";
 
   const headers: Record<string, string> = {};
   req.headers.forEach((v, k) => {
